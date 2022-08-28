@@ -32,78 +32,151 @@ class SelfDescriptionComponent():
     #Monitor Process
     def monitor(self,data):
         analisys_data = {}
-        analisys_data["devices"] = []
-        analisys_data["resources"] = []
-        analisys_data["properties"] = []
-
+        analisys_data["CREATE"] = {"devices":[]}
+        analisys_data["UPDATE"] = {"devices":[]}
+        analisys_data["DELETE"] = {"devices":[]}
         #Parsing JSON data.
-        dict_obj = json.loads(data)
-        print(dict_obj)
-        """
+        data_dic = json.loads(data)
+        #print(dict_obj)
         
-        #Create request
-        if dict_obj["opt_type"]=="CREATE":
-            analisys_data["opt_type"] = "CREATE"
-            for device in dict_obj["devices"]:
-                filter_d = {"global_id":device["global_id"]}
-                document = self.mongo_client.get_one_document(filter_d)
-                device_t = {}
-                device_t["new"] = device
-                device_t["old"] = document
-                analisys_data["devices"].append(device_t)
         
-
+        #Create device request
+        if len(data_dic["CREATE"]["devices"]) !=0:            
+            self.find_device_old_representation(data_dic["CREATE"]["devices"],analisys_data["CREATE"]["devices"])
+        
+        #Update device request
+        if len(data_dic["UPDATE"]["devices"]) !=0:            
+            self.find_device_old_representation(data_dic["UPDATE"]["devices"],analisys_data["UPDATE"]["devices"])            
+        
+        #Delete device request
+        if len(data_dic["DELETE"]["devices"]) !=0:            
+            self.find_device_old_representation(data_dic["DELETE"]["devices"],analisys_data["DELETE"]["devices"])          
+        
         #Call analysis Process
         self.analysis(analisys_data)
-        """
 
 
     #Analisis Process
     def analysis(self,data):
 
         plan_request = {}
-        plan_request["CREATE"] = {}
-        plan_request["CREATE"]["devices"] = []
+        plan_request["CREATE"] = {"devices":[]}
+        plan_request["UPDATE"] = {"devices":[]}
+        plan_request["DELETE"] = {"devices":[]}
+        plan_request["ALERTS"] = {"warnings":[],"Failures":[]}
 
+        for device in data["CREATE"]["devices"]:
+            if not device["old"] and device["new"]:
+                #Create Request Plan
+                plan_request["CREATE"]["devices"].append(device["new"])
+                #Save device Representation to MongoDB
+                self.mongo_client.insert_document(device["new"])
+            elif device["old"] and device["new"]:
+                if device["old"] != device["new"]:
+                    #Update Request Plan
+                    plan_request["UPDATE"]["devices"].append(device["new"])
+                    #Save update Representation to MongoDB
+                    self.mongo_client.update_document(device["new"])
+        
+        for device in data["UPDATE"]["devices"]:
+            if not device["old"] and device["new"]:
+                #Create Request Plan
+                plan_request["CREATE"]["devices"].append(device["new"])
+                #Save device Representation to MongoDB
+                self.mongo_client.insert_document(device["new"])
+            elif device["old"] and device["new"]:
+                if device["old"] != device["new"]:
+                    #Update Request Plan
+                    plan_request["UPDATE"]["devices"].append(device["new"])
+                    #Save update Representation to MongoDB
+                    self.mongo_client.update_document(device["new"])
+        
+        for device in data["DELETE"]["devices"]:
+            if device["old"] and device["new"]:
+                #Create Request Plan
+                plan_request["DELETE"]["devices"].append(device["new"])
+                #Save device Representation to MongoDB
+                self.mongo_client.delete_document(device["new"])
 
-        if data["opt_type"]=="CREATE":
-            if data["devices"]:
-                for device in data["devices"]:
-                    if not device["old"] and device["new"]:
-                        #Create Request To Plan
-                        plan_request["CREATE"]["devices"].append(device["new"])
-                        #Save device Representation to MongoDB
-                        self.mongo_client.insert_document(device["new"])
-
-        """
-        if dict_obj["device"]:
-            request["new"] = {}
-            request["new"]["devices"] = []
-            request["new"]["devices"].append(dict_obj["device"])"""
             
+
+        #Rules Evaluation
+        """total_d = 3
+        if len(self.mongo_client.get_all()) > total_d:
+            plan_request["ALERTS"]["warnings"].append("The number of devices is very hight")
+        else:
+            plan_request["ALERTS"]["warnings"].append("The number of devices is very low")"""
+
         self.plan(plan_request)
+           
+        
 
     #Plan Process
     def plan(self,request):   
         execute_request = {}
-        execute_request["create_nodes"] = {}
-        execute_request["create_nodes"]["devices"] = []
-        execute_request["alerts"] = []
+        execute_request["CREATE_NODES"] = {"devices":[]}
+        execute_request["UPDATE_NODES"] = {"devices":[]}
+        execute_request["DELETE_NODES"] = {"devices":[]}
+        execute_request["ALERTS"] = {"warnings":[],"faults":[]}
                 
-        if request["CREATE"]:
-            if request["CREATE"]["devices"]:
-                for device in request["CREATE"]["devices"]:
-                    device_n = Device(global_id=device["global_id"],name=device["name"],description=device["description"],create_nodes=device["is_gateway"])
-                    execute_request["create_nodes"]["devices"].append([device_n,device["device_parent"]])           
+        for device in request["CREATE"]["devices"]:
+            device_n = Device(global_id=device["global_id"],name=device["name"],description=device["description"],create_nodes=device["is_gateway"])
+            #[New Device, Device Parent ID]
+            execute_request["CREATE_NODES"]["devices"].append([device_n,device["device_parent"]])
+
+        for device in request["UPDATE"]["devices"]:
+            node = Device.nodes.get(global_id=device["global_id"])
+            new_node,device_parent = self.update_device_node(device,node)
+            execute_request["UPDATE_NODES"]["devices"].append([new_node,device_parent])
+        
+        for device in request["DELETE"]["devices"]:
+            node = Device.nodes.get(global_id=device["global_id"])
+            execute_request["DELETE_NODES"]["devices"].append(node)
         
         self.execute(execute_request)
 
     #Execute Process
     def execute(self,plan):
         connector = NeoConnector()
-        if len(plan["create_nodes"]["devices"])!=0:
-            for device in plan["create_nodes"]["devices"]:
-                connector.saveDevice(device[0],device[1])        
+        #new device Nodes
+        for device in plan["CREATE_NODES"]["devices"]:
+            connector.saveDevice(device[0],device[1])
+
+        #update device Nodes
+        for device in plan["UPDATE_NODES"]["devices"]:
+            connector.updateDevice(device[0],device[1])
+        
+        #Delete device Nodes
+        for device in plan["DELETE_NODES"]["devices"]:
+            connector.deleteDevice(device)
+
+
+    #Complementary Methods
+    def find_device_old_representation(self,old_list,new_list):
+        if(len(old_list)!=0):
+            for device in old_list:
+                filter_d = {"global_id":device["global_id"]}
+                document = self.mongo_client.get_one_document(filter_d)
+                device_n = {}
+                device_n["new"] = device
+                device_n["old"] = document                
+                new_list.append(device_n)
+    
+    def update_device_node(self,new_data,old_node):
+        device_parent = None
+        #Update Properties
+        if new_data["name"] != old_node.name: 
+            old_node.name = new_data["name"]
+        if new_data["description"] != old_node.description: 
+            old_node.description = new_data["description"]
+        if new_data["is_gateway"] != old_node.is_gateway:
+            old_node.is_gateway = new_data["is_gateway"]
+        for parent in old_node.device_parent:
+            if new_data["device_parent"] != parent.global_id:
+                device_parent = new_data["device_parent"]        
+        return old_node, device_parent
+
+
 
 #Principal Process
 if __name__ == '__main__':
