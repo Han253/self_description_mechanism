@@ -14,12 +14,12 @@ class MongoConnector():
     def get_database(self):
         return self.db
     
+    def get_collection(self,c_name):
+        self.collection = self.db[c_name]
+    
     def get_all(self):
         devices_list = self.collection.all()
-        return devices_list
-    
-    def create_or_set_collection(self,c_name):
-        self.collection = self.db[c_name]
+        return devices_list  
     
     def insert_document(self,document):
         document = self.collection.insert_one(document)

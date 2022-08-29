@@ -12,15 +12,40 @@ class Device(StructuredNode):
     description = StringProperty()
     is_gateway = BooleanProperty()
     device_parent = RelationshipTo('Device',"PARENT")
+    resources = RelationshipTo('Resource',"USE")
+
+class Resource(StructuredNode):
+    nid = UniqueIdProperty()
+    global_id = IntegerProperty(unique_index=True, required=True)
+    name = StringProperty(unique_index=True, required=True)
+    description = StringProperty()
+    type = StringProperty()
+    
 
 class NeoConnector():
 
-    def saveDevice(self,device:Device,parent_global_id=None):
+    #Save nodes
+    def saveResource(self,resource:Resource):
+        resource = resource.save()
+        return resource
+    
+    def updateResource(self,resource:Resource):
+        resource = resource.save()
+        return resource
+    
+    def deleteResource(self,resource:Device):
+        resource.device_parent.disconnect_all()
+        resource.delete()
+
+    def saveDevice(self,device:Device,parent_global_id=None,resources=[]):
         device = device.save()
         if parent_global_id!= None:
             device_parent_node = Device.nodes.get(global_id= parent_global_id)
             device.device_parent.connect(device_parent_node)
-        return device
+        for resource in resources:
+            resource_node = Resource.nodes.get(global_id=resource["global_id"])
+            device.resources.connect(resource_node)
+        return device  
 
     def updateDevice(self,device:Device,parent_global_id=None):
         device = device.save()
