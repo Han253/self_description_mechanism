@@ -17,9 +17,8 @@ class MongoConnector():
     def get_collection(self,c_name):
         self.collection = self.db[c_name]
     
-    def get_all(self):
-        devices_list = self.collection.all()
-        return devices_list  
+    def get_all(self):        
+        return self.collection.find()
     
     def insert_document(self,document):
         document = self.collection.insert_one(document)
@@ -31,6 +30,21 @@ class MongoConnector():
         data = self.get_update_data(old_document,document)
         document = self.collection.update_one(filter,data)
         return document
+    
+    def update_document_relation(self,document,relation):
+        filter = {'global_id':document["global_id"],"type":relation}
+        old_document = self.get_one_document(filter) 
+        data = self.get_update_data(old_document,document)
+        document = self.collection.update_one(filter,data)
+        new_document = self.get_one_document(filter) 
+        if relation == "device_resource":
+            if len(new_document["resources"])==0:
+                self.collection.delete_one(filter)       
+        if relation == "app_device":
+            if len(new_document["devices"])==0:
+                self.collection.delete_one(filter)        
+        return new_document
+        
     
     def delete_document(self,document):
         filter = {'global_id':document["global_id"]}
