@@ -24,7 +24,7 @@ class SelfDescriptionComponent():
     RELATIONS_TYPES = ["device_resource","app_device","app_service","service_resource"]
     QUEUE_TYPES = ["create","update","delete"]
 
-    def __init__(self,amqpBroker='localhost',queue='representation',mongoDb='iot'):
+    def __init__(self,amqpBroker='192.168.1.105',queue='representation',mongoDb='iot'):
         self.amqpBroker = amqpBroker
         self.amqpQueue = queue
         #Get mongodb Client,db and Collection
@@ -487,7 +487,7 @@ class SelfDescriptionComponent():
     
     #Send AMQP Broker data
     def send_message(self,message):
-        connection = pika.BlockingConnection(pika.ConnectionParameters(host='localhost'))
+        connection = pika.BlockingConnection(pika.ConnectionParameters(host='192.168.1.105'))
         channel = connection.channel()
         channel.queue_declare(queue='logs')
         channel.basic_publish(exchange='', routing_key='logs', body=message)

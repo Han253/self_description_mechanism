@@ -1,8 +1,10 @@
 import re
+import os
 from pymongo import MongoClient
 
 #Mongodb connection parameters
-CONNECTION_STRING = "mongodb://localhost:27017"
+MONGO_HOST = os.getenv("MONGO_HOST", default='localhost')
+CONNECTION_STRING = 'mongodb://'+MONGO_HOST+':27017'
 
 class MongoConnector():
 

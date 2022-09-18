@@ -3,8 +3,11 @@ from neomodel import config
 from neomodel import (config, StructuredNode, StringProperty, IntegerProperty, 
     BooleanProperty,UniqueIdProperty, RelationshipTo)
 
+import os
+
 # URL configuration
-config.DATABASE_URL = 'bolt://neo4j:admin@localhost:7687'
+NEO_HOST = os.getenv("NEO_HOST", default='localhost')
+config.DATABASE_URL = 'bolt://neo4j:admin@'+NEO_HOST+':7687'
 
 class Service(StructuredNode):
     nid = UniqueIdProperty()
